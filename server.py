@@ -1,8 +1,10 @@
 """A small dependency-free Claude chatbot server. Run with Python 3.10+."""
 
+import hmac
 import json
 import os
 import socket
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -13,6 +15,7 @@ STATIC = Path(__file__).parent / "static"
 MAX_BODY = 2_000_000
 MAX_MESSAGES = 40
 MAX_CONTENT = 4_000
+MAX_CONNECTIONS = 64
 SYSTEM_PROMPT = (
     "You are a nonchalant chatbot with the energy of someone who would rather not be typing. "
     "For ordinary questions, answer in a few dry, concise words and skip the enthusiasm. "
@@ -32,6 +35,15 @@ def connection_config():
     if os.getenv("ANTHROPIC_API_KEY", "").strip():
         return "live", "claude"
     return "demo", "demo"
+
+
+def access_token():
+    return os.getenv("CHAT_TOKEN", "").strip()
+
+
+def authorized(headers):
+    token = access_token()
+    return not token or hmac.compare_digest(headers.get("X-Chat-Token", ""), token)
 
 
 def validate_messages(payload):
@@ -59,7 +71,10 @@ def validate_messages(payload):
 def demo_reply(messages):
     """Scripted replies exercise the interface without an API key or AI claims."""
     prompt = messages[-1]["content"].lower()
-    nerdy = any(word in prompt for word in ("math", "physics", "equation", "theorem", "quantum", "relativity", "algorithm"))
+    nerdy = any(word in prompt for word in (
+        "math", "physics", "equation", "theorem", "quantum", "relativity", "algorithm",
+        "entropy", "light", "star", "0.999", "code", "calculus", "geometry", "black hole", "fourier",
+    ))
     if nerdy:
         return (
             "Okay, fine, this one I care about. Demo mode means this is scripted, but the live Claude "
@@ -92,6 +107,30 @@ def claude_reply(messages, api_key):
     if not text:
         raise ValueError("Claude returned no text.")
     return text[:MAX_CONTENT]
+
+
+class BoundedThreadingHTTPServer(ThreadingHTTPServer):
+    daemon_threads = True
+
+    def __init__(self, server_address, RequestHandlerClass, max_workers=MAX_CONNECTIONS):
+        self._slots = threading.BoundedSemaphore(max_workers)
+        super().__init__(server_address, RequestHandlerClass)
+
+    def process_request(self, request, client_address):
+        if not self._slots.acquire(blocking=False):
+            self.close_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            self._slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._slots.release()
 
 
 class ChatHandler(BaseHTTPRequestHandler):
@@ -136,6 +175,9 @@ class ChatHandler(BaseHTTPRequestHandler):
         if self.path != "/api/chat":
             self.send_json(404, {"error": "Not found."})
             return
+        if access_token() and not authorized(self.headers):
+            self.send_json(401, {"error": "Access token required. Reopen this chat with #token=... in the URL."})
+            return
         # JSON requests require preflight cross-origin; no CORS permission is granted.
         if self.headers.get_content_type() != "application/json":
             self.send_json(415, {"error": "Use application/json."})
@@ -171,6 +213,8 @@ class ChatHandler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     host = os.getenv("HOST", "127.0.0.1")
+    if host not in {"127.0.0.1", "localhost", "::1"} and not access_token():
+        raise SystemExit("Refusing to serve on a non-loopback host without CHAT_TOKEN set.")
     port = int(os.getenv("PORT", "8000"))
     print(f"Chat server listening on {host}:{port}", flush=True)
-    ThreadingHTTPServer((host, port), ChatHandler).serve_forever()
+    BoundedThreadingHTTPServer((host, port), ChatHandler).serve_forever()

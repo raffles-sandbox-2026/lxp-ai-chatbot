@@ -8,7 +8,7 @@ from http.server import ThreadingHTTPServer
 from unittest.mock import patch
 from urllib.error import HTTPError, URLError
 
-from server import MAX_BODY, MAX_CONTENT, ChatHandler, SYSTEM_PROMPT, claude_reply, connection_config, validate_messages
+from server import MAX_BODY, MAX_CONTENT, ChatHandler, SYSTEM_PROMPT, claude_reply, connection_config, demo_reply, validate_messages
 
 
 class MessageValidationTests(unittest.TestCase):
@@ -38,6 +38,15 @@ class MessageValidationTests(unittest.TestCase):
         self.assertEqual(len(result), 3)
 
 
+class DemoReplyTests(unittest.TestCase):
+    def test_nerdy_suggestions_trigger_yap_reply(self):
+        for prompt in ("Why does light bend around stars?", "Is 0.999… equal to 1?", "Explain entropy"):
+            with self.subTest(prompt=prompt):
+                reply = demo_reply([{"role": "user", "content": prompt}])
+                self.assertIn("scripted", reply.lower())
+                self.assertIn("yap", reply.lower())
+
+
 class ChatHTTPTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -52,7 +61,7 @@ class ChatHTTPTests(unittest.TestCase):
         cls.thread.join()
 
     def setUp(self):
-        self.environment = patch.dict(os.environ, {"ANTHROPIC_API_KEY": "", "ANTHROPIC_MODEL": "test-model"})
+        self.environment = patch.dict(os.environ, {"ANTHROPIC_API_KEY": "", "ANTHROPIC_MODEL": "test-model", "CHAT_TOKEN": ""})
         self.environment.start()
         self.addCleanup(self.environment.stop)
 
@@ -129,6 +138,18 @@ class ChatHTTPTests(unittest.TestCase):
             status, _, _ = self.request("POST", "/api/chat", {"mode": "live", "provider": "demo", "messages": [{"role": "user", "content": "private text"}]})
         self.assertEqual(status, 409)
         upstream.assert_not_called()
+
+    def test_chat_token_is_required_when_configured(self):
+        payload = {"messages": [{"role": "user", "content": "hi"}]}
+        with patch.dict(os.environ, {"CHAT_TOKEN": "test-token"}):
+            status, _, body = self.request("POST", "/api/chat", payload)
+            self.assertEqual(status, 401)
+            self.assertIn("Access token", json.loads(body)["error"])
+            wrong, _, _ = self.request("POST", "/api/chat", payload, headers={"Content-Type": "application/json", "X-Chat-Token": "wrong"})
+            self.assertEqual(wrong, 401)
+            good, _, reply = self.request("POST", "/api/chat", payload, headers={"Content-Type": "application/json", "X-Chat-Token": "test-token"})
+            self.assertEqual(good, 200)
+            self.assertIn("scripted demo", json.loads(reply)["reply"].lower())
 
     def test_only_public_assets_are_served(self):
         for path in ("/server.py", "/.env", "/.git/config", "/../server.py", "/%2e%2e/server.py"):
