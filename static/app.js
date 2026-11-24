@@ -2,7 +2,21 @@
 
 const $ = (selector) => document.querySelector(selector);
 const storageKey = "lxp-ai-chatbot.chat.v1.";
+const tokenStorageKey = "lxp-ai-chatbot.token.";
 const maxChats = 20;
+const maxStoredMessages = 200;
+let chatToken = "";
+try {
+  const urlToken = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("token");
+  if (urlToken) {
+    chatToken = urlToken;
+    try { localStorage.setItem(tokenStorageKey, urlToken); } catch { /* Token still works for this visit. */ }
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  }
+} catch { /* Ignore malformed hash tokens. */ }
+if (!chatToken) {
+  try { chatToken = localStorage.getItem(tokenStorageKey) || ""; } catch { chatToken = ""; }
+}
 let chats = [];
 let currentId = null;
 let busy = false;
@@ -13,7 +27,7 @@ let controller = null;
 let storageWarning = "";
 
 function validMessages(messages) {
-  return Array.isArray(messages) && messages.length <= 40 && messages.length % 2 === 0 &&
+  return Array.isArray(messages) && messages.length <= maxStoredMessages && messages.length % 2 === 0 &&
     messages.every((m, i) => m && m.role === (i % 2 ? "assistant" : "user") &&
       typeof m.content === "string" && m.content.trim().length > 0 && Array.from(m.content).length <= 4000);
 }
@@ -120,6 +134,17 @@ function scrollToBottom() {
   scroll.scrollTop = scroll.scrollHeight;
 }
 
+function newId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  const bytes = new Uint8Array(16);
+  if (globalThis.crypto?.getRandomValues) globalThis.crypto.getRandomValues(bytes);
+  else for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 async function sendMessage(event) {
   event.preventDefault();
   const content = $("#prompt").value.trim();
@@ -127,9 +152,16 @@ async function sendMessage(event) {
   if (content.length > 4000) { showError("Please keep messages under 4,000 characters."); return; }
   showError("");
   const existing = activeChat();
-  const chat = existing || { id: crypto.randomUUID(), title: content.slice(0, 60), messages: [] };
-  // Keep complete user/assistant pairs, with room for the next user message.
-  const messages = [...chat.messages.slice(-38), { role: "user", content }];
+  const mode = live ? "live" : "demo";
+  if (existing && ((existing.mode && existing.mode !== mode) || (existing.provider && existing.provider !== provider))) {
+    showError("This chat was saved with a different AI mode. Start a new chat to continue.");
+    return;
+  }
+  const chat = existing || { id: newId(), title: content.slice(0, 60), messages: [], mode, provider };
+  chat.mode = chat.mode || mode;
+  chat.provider = chat.provider || provider;
+  // Send only a recent API window; keep the full transcript in this browser.
+  const requestMessages = [...chat.messages.slice(-38), { role: "user", content }];
   $("#welcome").hidden = true;
   $("#messages").append(makeMessage("user", content), makeMessage("assistant", "Thinking…", true));
   $("#prompt").value = "";
@@ -141,14 +173,14 @@ async function sendMessage(event) {
   try {
     const response = await fetch("/api/chat", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages, mode: live ? "live" : "demo", provider }),
+      headers: { "Content-Type": "application/json", ...(chatToken ? { "X-Chat-Token": chatToken } : {}) },
+      body: JSON.stringify({ messages: requestMessages, mode, provider }),
       signal: controller.signal,
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Couldn't send your message. Please try again.");
     if (typeof result.reply !== "string" || !result.reply.trim()) throw new Error("The reply was empty. Please try again.");
-    chat.messages = [...messages, { role: "assistant", content: result.reply }];
+    chat.messages = [...chat.messages, { role: "user", content }, { role: "assistant", content: result.reply }].slice(-maxStoredMessages);
     chats = [chat, ...chats.filter((c) => c.id !== chat.id)].slice(0, maxChats);
     currentId = chat.id;
     save(chat, null, Boolean(existing));
