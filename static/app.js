@@ -7,10 +7,15 @@ const maxChats = 20;
 const maxStoredMessages = 200;
 let chatToken = "";
 try {
-  const urlToken = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("token");
-  if (urlToken) {
-    chatToken = urlToken;
-    try { localStorage.setItem(tokenStorageKey, urlToken); } catch { /* Token still works for this visit. */ }
+  for (const part of window.location.hash.replace(/^#/, "").split("&")) {
+    const separator = part.indexOf("=");
+    if (separator > 0 && part.slice(0, separator) === "token") {
+      chatToken = decodeURIComponent(part.slice(separator + 1));
+      break;
+    }
+  }
+  if (chatToken) {
+    try { localStorage.setItem(tokenStorageKey, chatToken); } catch { /* Token still works for this visit. */ }
     window.history.replaceState(null, "", window.location.pathname + window.location.search);
   }
 } catch { /* Ignore malformed hash tokens. */ }
@@ -49,6 +54,22 @@ function readChats() {
 try { chats = readChats().slice(0, maxChats); }
 catch { storageWarning = "Browser storage is unavailable. Chats will last only for this visit."; }
 
+function persistChat(chat) {
+  let attempts = 0;
+  while (true) {
+    try {
+      localStorage.setItem(storageKey + chat.id, JSON.stringify(chat));
+      return;
+    } catch (error) {
+      attempts += 1;
+      let others = [];
+      try { others = readChats().filter((saved) => saved.id !== chat.id); } catch { others = []; }
+      if (!others.length || attempts > maxChats) throw error;
+      try { localStorage.removeItem(storageKey + others[others.length - 1].id); } catch { throw error; }
+    }
+  }
+}
+
 function save(chat, deletedId = null, existing = false) {
   try {
     if (deletedId) localStorage.removeItem(storageKey + deletedId);
@@ -60,7 +81,7 @@ function save(chat, deletedId = null, existing = false) {
         return;
       }
       chat.updatedAt = Date.now();
-      localStorage.setItem(storageKey + chat.id, JSON.stringify(chat));
+      persistChat(chat);
     }
     const latest = readChats();
     for (const old of latest.slice(maxChats)) localStorage.removeItem(storageKey + old.id);
