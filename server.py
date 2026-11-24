@@ -43,7 +43,12 @@ def access_token():
 
 def authorized(headers):
     token = access_token()
-    return not token or hmac.compare_digest(headers.get("X-Chat-Token", ""), token)
+    if not token:
+        return True
+    try:
+        return hmac.compare_digest(headers.get("X-Chat-Token", ""), token)
+    except TypeError:
+        return False
 
 
 def validate_messages(payload):
@@ -213,7 +218,10 @@ class ChatHandler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     host = os.getenv("HOST", "127.0.0.1")
-    if host not in {"127.0.0.1", "localhost", "::1"} and not access_token():
+    token = access_token()
+    if token and not token.isascii():
+        raise SystemExit("CHAT_TOKEN must be ASCII.")
+    if host not in {"127.0.0.1", "localhost", "::1"} and not token:
         raise SystemExit("Refusing to serve on a non-loopback host without CHAT_TOKEN set.")
     port = int(os.getenv("PORT", "8000"))
     print(f"Chat server listening on {host}:{port}", flush=True)

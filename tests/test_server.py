@@ -151,6 +151,12 @@ class ChatHTTPTests(unittest.TestCase):
             self.assertEqual(good, 200)
             self.assertIn("scripted demo", json.loads(reply)["reply"].lower())
 
+    def test_non_ascii_chat_token_never_authorizes(self):
+        payload = {"messages": [{"role": "user", "content": "hi"}]}
+        with patch.dict(os.environ, {"CHAT_TOKEN": "tökén"}):
+            status, _, _ = self.request("POST", "/api/chat", payload)
+            self.assertEqual(status, 401)
+
     def test_only_public_assets_are_served(self):
         for path in ("/server.py", "/.env", "/.git/config", "/../server.py", "/%2e%2e/server.py"):
             with self.subTest(path=path):

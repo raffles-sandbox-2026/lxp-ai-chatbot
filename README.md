@@ -26,7 +26,7 @@ Without `ANTHROPIC_API_KEY`, the app runs in demo mode with scripted replies. Th
 
 Optional env vars: `HOST` (default `127.0.0.1`), `PORT` (default `8000`), `CHAT_TOKEN`.
 
-For LAN use, set `HOST=0.0.0.0` and `CHAT_TOKEN=...`; the server refuses non-loopback hosts without a token. Open `http://<host>:8000/#token=...` once — the browser stores the token and sends it as a header.
+For LAN use, set `HOST=0.0.0.0` and an ASCII `CHAT_TOKEN=...`; the server refuses non-loopback hosts without a token and rejects non-ASCII tokens. Open `http://<host>:8000/#token=...` once — the browser stores the token and sends it as a header.
 
 ## Test
 
