@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#fcfcfc">
+  <title>mmh — a chatbot with low effort</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#prompt">Skip to message</a>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Conversations">
+      <a class="brand" href="/" aria-label="Chat home"><span class="brand-icon" aria-hidden="true">—</span> mmh<span class="brand-note">/ low effort</span></a>
+      <button id="new-chat" class="new-chat"><span aria-hidden="true">＋</span> New chat <span class="new-arrow" aria-hidden="true">↗</span></button>
+      <div class="section-label">Your conversations</div>
+      <nav id="chat-list" aria-label="Chat history"></nav>
+      <p id="history-empty" class="history-empty">A fresh start.<br>Your conversations will appear here.</p>
+      <div class="sidebar-bottom"><span class="local-dot" aria-hidden="true"></span><div>Just on this browser<small>Your chats are saved locally.</small></div></div>
+    </aside>
+
+    <main>
+      <header class="topbar"><div class="workspace-name">Your workspace <span aria-hidden="true">/</span> <span id="chat-title">New conversation</span></div><div class="top-actions"><button id="clear-chat" class="text-button" disabled>Delete chat</button><button id="about-button" class="mode-button">Connecting…</button></div></header>
+
+      <div id="conversation-scroll" class="conversation-scroll">
+        <section id="welcome" class="welcome" aria-labelledby="welcome-title">
+          <div class="eyebrow"><span class="little-star" aria-hidden="true">✳</span> low effort, high nerd</div>
+          <h1 id="welcome-title">What’s up? Don’t ask too much.</h1>
+          <p class="welcome-copy">Most questions get a short answer.<br>Math and physics get the lecture.</p>
+          <div class="suggestions">
+            <button class="suggestion" data-prompt="Explain entropy like I'm a chaos gremlin."><span class="suggestion-icon" aria-hidden="true">✧</span><strong>Ask something normal</strong><span>Get a short answer</span><span class="card-arrow" aria-hidden="true">↗</span></button>
+            <button class="suggestion" data-prompt="Why does light bend around stars?"><span class="suggestion-icon" aria-hidden="true">✎</span><strong>Nerdy yap unlocked</strong><span>Try general relativity</span><span class="card-arrow" aria-hidden="true">↗</span></button>
+            <button class="suggestion" data-prompt="Is 0.999… equal to 1?"><span class="suggestion-icon" aria-hidden="true">◎</span><strong>Math mode</strong><span>Ask an annoying question</span><span class="card-arrow" aria-hidden="true">↗</span></button>
+          </div>
+          <p class="demo-note" id="welcome-note">Demo preview · Scripted replies, no AI connection yet.</p>
+        </section>
+        <section id="messages" class="messages" role="log" aria-label="Conversation" aria-live="polite" aria-relevant="additions text"></section>
+      </div>
+
+      <div class="composer-area">
+        <div id="error" class="error" role="alert" hidden></div>
+        <form id="chat-form" class="composer">
+          <label class="sr-only" for="prompt">Your message</label>
+          <textarea id="prompt" name="message" rows="2" maxlength="4000" placeholder="Say something. Or don't." required></textarea>
+          <div class="composer-bottom"><span id="composer-status"><span class="status-dot" aria-hidden="true"></span> <span id="mode-label">Connecting</span></span><div class="composer-controls"><span class="keyboard-hint">Enter to send <span aria-hidden="true">↵</span></span><button id="send" class="send-button" type="submit" aria-label="Send message" disabled>↑</button></div></div>
+        </form>
+        <p class="composer-caption" id="privacy-note">Demo replies are scripted. Chats stay in this browser. <button class="inline-button" id="details-button">About this chatbot</button></p>
+      </div>
+    </main>
+  </div>
+
+  <dialog id="about-dialog" aria-labelledby="about-title"><div class="dialog-heading"><h2 id="about-title">Low-effort chatbot</h2><button id="close-about" class="text-button" aria-label="Close about dialog">✕</button></div><p id="about-mode">This preview uses scripted demo replies. It isn't connected to an AI model.</p><p>Your conversations are saved only in this browser. Delete a chat to remove its saved history.</p><p>To enable real replies, the server owner sets <code>ANTHROPIC_API_KEY</code> and restarts the server. Messages are sent to Anthropic to generate replies.</p><a class="repo-link" href="https://github.com/raffles-sandbox-2026/lxp-ai-chatbot" target="_blank" rel="noopener noreferrer">View the project on GitHub ↗</a></dialog>
+</body>
+</html>
